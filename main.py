@@ -8,8 +8,14 @@ app=FastAPI(title='AgentHub Rules API',version='1.0.0')
 @contextmanager
 def conn():
     db=sqlite3.connect(os.getenv('DATABASE_PATH','app.db'));db.row_factory=sqlite3.Row
-    try:yield db;db.commit()
-    finally:db.close()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 with conn() as db:db.executescript("""CREATE TABLE IF NOT EXISTS agents(id INTEGER PRIMARY KEY,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',fallback TEXT NOT NULL,rules_json TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS executions(id INTEGER PRIMARY KEY,agent_id INTEGER NOT NULL,input_text TEXT NOT NULL,matched_keyword TEXT,output_text TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
 class Rule(BaseModel):
     keyword:str=Field(min_length=1)
