@@ -45,7 +45,7 @@ def agent(id:int):
 def find_matching_rule(rules, text):
     """Match complete keywords/phrases; avoid partial-word false positives."""
     for rule in rules:
-        pattern=r'(?<!\\w)'+re.escape(rule['keyword'])+r'(?!\\w)'
+        pattern=r'(?<!\w)'+re.escape(rule['keyword'])+r'(?!\w)'
         if re.search(pattern,text,flags=re.IGNORECASE):
             return rule
     return None
