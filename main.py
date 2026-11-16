@@ -83,3 +83,17 @@ async def require_api_auth(request, call_next):
                 return JSONResponse({'error': 'Unauthorized'}, status_code=401)
     return await call_next(request)
 
+
+
+@app.get('/api/export/agents.csv')
+def export_agents_csv():
+    """Download a read-only snapshot of the local demo dataset."""
+    from fastapi.responses import Response
+    from data_export import serialize_csv
+    with conn() as connection:
+        cursor = connection.execute("SELECT id,name,description,fallback,created_at FROM agents ORDER BY id")
+        columns = [column[0] for column in cursor.description]
+        content = serialize_csv(cursor.fetchall(), columns)
+    return Response(content=content, media_type='text/csv; charset=utf-8',
+                    headers={'Content-Disposition':'attachment; filename="agents.csv"',
+                             'Cache-Control':'no-store'})
