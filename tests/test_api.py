@@ -58,3 +58,13 @@ class AgentHubTest(unittest.TestCase):
         too_many=self.client.post('/api/agents',json={'name':'Too many','fallback':'no',
             'rules':[{'keyword':'k','response':'r'}]*101})
         self.assertEqual(too_many.status_code,422)
+
+    def test_word_matching_prevents_partial_word_false_positive(self):
+        created=self.client.post('/api/agents',json={'name':'Keyword QA','fallback':'No rule',
+             'rules':[{'keyword':'ship','response':'Shipping instructions'}]})
+        self.assertEqual(created.status_code,201)
+        agent_id=created.json()['id']
+        target=f'/api/agents/{agent_id}/preview'
+        self.assertIsNone(self.client.post(target,json={'text':'a shipment'}).json()['matched_keyword'])
+        self.assertEqual(self.client.post(target,json={'text':'please SHIP today'}).json()['output'],'Shipping instructions')
+        self.assertEqual(self.client.post(target,json={'text':'can you help with ship?'}).json()['matched_keyword'],'ship')
