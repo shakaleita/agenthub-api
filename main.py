@@ -18,15 +18,15 @@ def conn():
         db.close()
 with conn() as db:db.executescript("""CREATE TABLE IF NOT EXISTS agents(id INTEGER PRIMARY KEY,name TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',fallback TEXT NOT NULL,rules_json TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS executions(id INTEGER PRIMARY KEY,agent_id INTEGER NOT NULL,input_text TEXT NOT NULL,matched_keyword TEXT,output_text TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP);""")
 class Rule(BaseModel):
-    keyword:str=Field(min_length=1)
-    response:str=Field(min_length=1)
+    keyword:str=Field(min_length=1,max_length=120)
+    response:str=Field(min_length=1,max_length=2000)
 class Agent(BaseModel):
-    name:str=Field(min_length=1)
+    name:str=Field(min_length=1,max_length=120)
     description:str=''
-    fallback:str=Field(min_length=1)
-    rules:list[Rule]=Field(min_length=1)
+    fallback:str=Field(min_length=1,max_length=2000)
+    rules:list[Rule]=Field(min_length=1,max_length=100)
 class Run(BaseModel):
-    text:str=Field(min_length=1)
+    text:str=Field(min_length=1,max_length=10000)
 def get_agent(db,id):
     row=db.execute('SELECT * FROM agents WHERE id=?',(id,)).fetchone()
     if row is None:raise HTTPException(404,'Agent not found')
@@ -42,6 +42,17 @@ def create_agent(agent:Agent):
 @app.get('/api/agents/{id}')
 def agent(id:int):
     with conn() as db:return get_agent(db,id)
+@app.post('/api/agents/{id}/preview')
+def preview(id:int,payload:Run):
+    """Evaluate rules without creating an execution-history record."""
+    with conn() as db:
+        item=get_agent(db,id)
+        matched=next((rule for rule in item['rules']
+                      if rule['keyword'].casefold() in payload.text.casefold()),None)
+        return {'agent_id':id,'matched_keyword':matched['keyword'] if matched else None,
+                'output':matched['response'] if matched else item['fallback'],
+                'saved_to_history':False,'rules_evaluated':len(item['rules'])}
+
 @app.post('/api/agents/{id}/run')
 def run(id:int,payload:Run):
     with conn() as db:
