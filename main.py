@@ -1,4 +1,4 @@
-import json, os, sqlite3
+import json, os, sqlite3, re
 from contextlib import contextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -42,13 +42,20 @@ def create_agent(agent:Agent):
 @app.get('/api/agents/{id}')
 def agent(id:int):
     with conn() as db:return get_agent(db,id)
+def find_matching_rule(rules, text):
+    """Match complete keywords/phrases; avoid partial-word false positives."""
+    for rule in rules:
+        pattern=r'(?<!\\w)'+re.escape(rule['keyword'])+r'(?!\\w)'
+        if re.search(pattern,text,flags=re.IGNORECASE):
+            return rule
+    return None
+
 @app.post('/api/agents/{id}/preview')
 def preview(id:int,payload:Run):
     """Evaluate rules without creating an execution-history record."""
     with conn() as db:
         item=get_agent(db,id)
-        matched=next((rule for rule in item['rules']
-                      if rule['keyword'].casefold() in payload.text.casefold()),None)
+        matched=find_matching_rule(item['rules'],payload.text)
         return {'agent_id':id,'matched_keyword':matched['keyword'] if matched else None,
                 'output':matched['response'] if matched else item['fallback'],
                 'saved_to_history':False,'rules_evaluated':len(item['rules'])}
@@ -56,7 +63,7 @@ def preview(id:int,payload:Run):
 @app.post('/api/agents/{id}/run')
 def run(id:int,payload:Run):
     with conn() as db:
-        a=get_agent(db,id);matched=next((r for r in a['rules'] if r['keyword'].lower() in payload.text.lower()),None)
+        a=get_agent(db,id);matched=find_matching_rule(a['rules'],payload.text)
         answer=matched['response'] if matched else a['fallback']
         c=db.execute('INSERT INTO executions(agent_id,input_text,matched_keyword,output_text) VALUES(?,?,?,?)',(id,payload.text,matched['keyword'] if matched else None,answer))
         return {'execution_id':c.lastrowid,'matched_keyword':matched['keyword'] if matched else None,'output':answer}
