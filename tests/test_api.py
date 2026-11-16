@@ -42,3 +42,19 @@ class AgentHubTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/agents/999999').status_code,404)
     def test_validation(self):
         self.assertEqual(self.client.post('/api/agents',json={'name':'','fallback':'x','rules':[]}).status_code,422)
+
+
+    def test_preview_does_not_write_audit_history(self):
+        a=self.client.post('/api/agents',json={'name':'Preview','fallback':'No match',
+              'rules':[{'keyword':'query','response':'Answered'}]})
+        self.assertEqual(a.status_code,201)
+        ident=a.json()['id']
+        before=len(self.client.get(f'/api/agents/{ident}/runs').json())
+        preview=self.client.post(f'/api/agents/{ident}/preview',json={'text':'QUERY'})
+        self.assertEqual(preview.status_code,200)
+        self.assertEqual(preview.json()['output'],'Answered')
+        self.assertFalse(preview.json()['saved_to_history'])
+        self.assertEqual(before,len(self.client.get(f'/api/agents/{ident}/runs').json()))
+        too_many=self.client.post('/api/agents',json={'name':'Too many','fallback':'no',
+            'rules':[{'keyword':'k','response':'r'}]*101})
+        self.assertEqual(too_many.status_code,422)
